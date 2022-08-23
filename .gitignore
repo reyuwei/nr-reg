@@ -2,3 +2,4 @@ lib/__pycache__/utils.cpython-38.pyc
 loss/__pycache__/loss.cpython-38.pyc
 *.pyc
 *.obj
+output/*
