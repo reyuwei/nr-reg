@@ -336,7 +336,6 @@ class NonRigidLayer():
 
     def update_v(self, new_v):
         self.init_v = new_v.squeeze()
-        self.init_lmk = vertices2landmarks(self.init_v.unsqueeze(0), self.init_f, self.lmk_faceid, self.lmk_bmc).squeeze()
 
     def save_mesh(self, fname):
         template_mesh_deform = Meshes([self.init_v], [self.init_f])

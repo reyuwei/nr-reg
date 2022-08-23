@@ -2,7 +2,7 @@ gpu: '0'
 savepath_folder: output
 
 template_mesh_path: data\\template.obj
-
+template_mesh_gd: F:\Projects_fromOnedrive\15_DIGITALHEAD\code\nonrigid\head_gd_another.pkl
 target_mesh_path: data\\target.obj
 
 node_interval: [50, 20, 10, 0]
