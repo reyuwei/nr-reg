@@ -1,15 +1,9 @@
 gpu: '0'
 savepath_folder: output
 
-reg_mask_ply: eye_nose_mask.ply
-rest_v_gd: head_gd_another.pkl
+template_mesh_path: data\\template.obj
 
-
-template_mesh_path: mxl\\template.obj
-template_lmk_path: mxl\template_lmk.txt
-
-target_mesh_path: mxl\\target.obj
-target_lmk_path:  mxl\target_lmk.txt
+target_mesh_path: data\\target.obj
 
 node_interval: [50, 20, 10, 0]
 iterations: [500, 500, 500, 500]

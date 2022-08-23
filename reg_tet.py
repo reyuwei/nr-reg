@@ -25,33 +25,6 @@ from pytorch3d.structures.meshes import Meshes
 from torch.utils.tensorboard import SummaryWriter
 
 
-
-def load_template_dict(ttype, template_folder):
-
-    template_dict = {}
-
-    if ttype == "skin":
-        template_dict['LAYER_ATTACH_DIS_ID_DICT'] = {0:[]}
-        template_dict['tet_dict'] = np.load(os.path.join(template_folder, "skin_dict.pkl"), allow_pickle=True)
-        tet_muscle_reg_pkl = os.path.join(template_folder, "tet_surface_reg_w_mask.pkl")
-        if os.path.exists(tet_muscle_reg_pkl):
-            tet_muscle_reg_mask = np.load(tet_muscle_reg_pkl, allow_pickle=True)
-            template_dict['reg_mask'] = tet_muscle_reg_mask
-    elif ttype=="muscle":
-        template_dict['tet_dict'] = np.load(os.path.join(template_folder, "muscle_merge_dict.pkl"), allow_pickle=True)
-        template_dict['LAYER_ATTACH_DIS_ID_DICT'] = np.load(os.path.join(template_folder, "naive_muscle_merge_attachment.pkl"), allow_pickle=True)
-
-        tet_muscle_reg_pkl = os.path.join(template_folder, "tet_muscle_merge_reg_w_mask.pkl")
-        if os.path.exists(tet_muscle_reg_pkl):
-            tet_muscle_reg_mask = np.load(tet_muscle_reg_pkl, allow_pickle=True)
-            template_dict['reg_mask'] = tet_muscle_reg_mask
-    elif ttype=="bone":
-        template_dict = {}
-    else:
-        print("no such ", ttype)
-
-    return template_dict
-
 if __name__ == "__main__":
     settings = {
         "gpu": 0,

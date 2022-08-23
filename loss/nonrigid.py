@@ -1,19 +1,21 @@
-from pytorch3d.ops import sample_points_from_meshes
+import torch
+import trimesh
+import numpy as np
 import pytorch3d
+import torch.nn.functional as F
+from pytorch3d.ops import sample_points_from_meshes
 from pytorch3d.ops.knn import knn_points
 from pytorch3d.structures.meshes import Meshes
-import torch
-import torch.nn.functional as F
 from pytorch3d.loss import (
     mesh_edge_loss, 
     mesh_laplacian_smoothing, 
     mesh_normal_consistency,)
 from pytorch3d.loss.chamfer import _handle_pointcloud_input, _validate_chamfer_reduction_inputs
 from pytorch3d.ops.knn import knn_gather, knn_points
-import torch.nn.functional as F
-import trimesh
-from utils import NonRigidNet, similarity_matrix, compute_transmat, dis_to_weight, vertices2landmarks
-import numpy as np
+from lib.util import vertices2landmarks
+from models.nonrigid_net import NonRigidNet
+from loss.contactloss import self_collision_loss
+from loss.loss_collecter import collision_loss, compute_collision_loss_with_mesh, similarity_matrix, dis_to_weight
 
 
 def p3d_chamfer_distance_with_filter(
@@ -236,7 +238,7 @@ def ARAP_reg_loss(node_position, deform_nodes_R, deform_nodes_t, node_gd=None, t
     if node_gd is not None:
         node_gd = node_gd[mask][:, mask]
 
-    deform_nodes_mat = compute_transmat(node_position, deform_nodes_R, deform_nodes_t)
+    deform_nodes_mat = NonRigidNet.compute_transmat(node_position, deform_nodes_R, deform_nodes_t)
     if node_gd is not None:
         # should be geodesic distance!!!
         # gdist sqrt
@@ -292,7 +294,7 @@ def rbf_weights(volume, control_pts, control_pts_weights=None):
     weight_volume = weight_volume.reshape(xyz.shape[0], -1)
     return weight_volume
 
-class NonRigidLayer():
+class HeadNonRigidLayer():
     def __init__(self, args, init_v, init_f, lmk_bmc, lmk_faceid, init_gd, init_reg_mask, device):
 
         self.args = args
@@ -392,6 +394,11 @@ class NonRigidLayer():
             arap_loss = node_arap_loss * self.reg_weight[mask]
             loss_dict['smooth'] = wts['smooth'] * arap_loss.mean()
 
+        # lmk
+        if wts['lmk'] > 0:
+            deformed_lmk = vertices2landmarks(deformed_v.unsqueeze(0), self.init_f, self.lmk_faceid, self.lmk_bmc).squeeze()
+            loss_dict['lmk'] = wts['lmk'] * F.mse_loss(deformed_lmk, target_lmk)
+
         # data
         sample_trg_v, sample_trg_n = sample_points_from_meshes(target_mesh, sample_mesh_v, return_normals=True)
         sample_trg_v = sample_trg_v.squeeze()
@@ -414,6 +421,133 @@ class NonRigidLayer():
             loss_dict['data'] = cf_dis * wts['data']
         if wts['data_normal'] > 0:
             loss_dict['data_normal'] = cf_dis_normal * wts['data_normal']
+
+        # pytorch3d smooth
+        update_p3d_mesh_shape_prior_losses(deformed_v, self.init_f, loss_dict, wts)
+
+        return loss_dict
+
+
+class HandNonRigidLayer():
+    def __init__(self, args, init_v, init_f, device):
+
+        self.args = args
+
+        self.init_v = init_v.to(device)
+        self.init_f = init_f.to(device)
+
+        self.reg_weight = torch.ones(init_v.shape[0]).to(device)              
+
+        self.device = device
+
+        self.nonrigid_net = NonRigidNet().to(device)
+
+    def compute_node(self, node_distance=8):
+        # uniform sample verts
+        if node_distance == 0:
+            self.embed_node = self.init_v.clone()
+            self.embed_node_weight = torch.eye(self.embed_node.shape[0]).to(self.device)
+        
+        else:
+
+            mesh_tri = trimesh.Trimesh(self.init_v[:,:3].cpu().detach().numpy(), self.init_f.cpu().detach().numpy(), process=False)
+
+            surface_area = mesh_tri.area
+            node_count = int(surface_area / ((node_distance/2)**2 * np.pi)) # node2node distance around 8 mm
+
+            node_pc = mesh_tri.as_open3d.sample_points_poisson_disk(node_count, init_factor=5, pcl=None)
+            sample_nodes = np.asarray(node_pc.points)
+
+            # compute weight
+            weight = rbf_weights(mesh_tri.vertices, sample_nodes)
+            weight = torch.from_numpy(weight).float().to(self.device)
+            sample_nodes = torch.from_numpy(sample_nodes).float().to(self.device)
+
+
+            self.embed_node = sample_nodes
+            self.embed_node_weight = weight
+
+
+    def update_v(self, new_v):
+        self.init_v = new_v.squeeze()
+
+    def save_mesh(self, fname):
+        template_mesh_deform = Meshes([self.init_v[:,:3]], [self.init_f])
+        pytorch3d.io.IO().save_mesh(template_mesh_deform, fname)
+        return template_mesh_deform
+
+
+    def align_rigid(self, target_lmk, savename):
+
+        matrix, _, _ = trimesh.registration.procrustes(self.init_lmk.cpu().detach().numpy(), target_lmk.cpu().detach().numpy())
+        hom = torch.cat([self.init_v, torch.ones(self.init_v.shape[0], 1).to(self.device)], dim=-1)
+        trans_v = (torch.from_numpy(matrix).float().to(self.device) @ hom.T).T[:, :3]
+
+        self.update_v(trans_v)
+        self.save_mesh(savename)
+
+
+    def embed_deform(self, node_rot, node_trans, target_mesh, wts, sample_mesh_v, forward_only=False):
+        # points: (, N, 6) - point with normal
+
+        deformed_v = self.nonrigid_net.forward(self.init_v, self.embed_node, node_rot, node_trans, self.embed_node_weight)
+
+        if forward_only:
+            return deformed_v
+        else:
+            loss = self.compute_loss(deformed_v, node_rot, node_trans, target_mesh, wts, sample_mesh_v)
+
+            return loss, deformed_v
+
+
+    def compute_loss(self, deformed_v, node_rot, node_trans, target_mesh, wts, sample_mesh_v):
+        loss_dict = {}
+
+        if "mse_v" in wts:
+            if wts['mse_v'] > 0:
+                # loss_dict['mse_v'] = wts['mse_v'] * torch.nn.functional.mse_loss(deformed_v[~self.eye_nose_mask], target_mesh.verts_packed()[~self.eye_nose_mask])
+                loss_dict['mse_v'] = wts['mse_v'] * ((deformed_v - target_mesh.verts_packed())**2).sum(-1).mean()
+
+        # adaptive smoothness 
+        if wts['smooth'] > 0:
+            if self.embed_node.shape[0] == self.init_v.shape[0]:
+                node_arap_loss, mask = ARAP_reg_loss(self.embed_node, node_rot, node_trans, node_gd=self.init_gd, thres_corres=self.args.thres_corres, node_sigma=self.args.node_sigma)
+            else:
+                node_arap_loss, mask = ARAP_reg_loss(self.embed_node, node_rot, node_trans, thres_corres=self.args.thres_corres, node_sigma=self.args.node_sigma)
+            arap_loss = node_arap_loss * self.reg_weight[mask]
+            loss_dict['smooth'] = wts['smooth'] * arap_loss.mean()
+
+        # data
+        sample_trg_v, sample_trg_n = sample_points_from_meshes(target_mesh, sample_mesh_v, return_normals=True)
+        sample_trg_v = sample_trg_v.squeeze()
+        sample_trg_n = sample_trg_n.squeeze()
+        
+        tetmesh = Meshes(verts=deformed_v[:,:3].unsqueeze(0), faces=self.init_f.unsqueeze(0))
+        sample_v, sample_v_normal = pytorch3d.ops.sample_points_from_meshes(tetmesh, sample_mesh_v, return_normals=True)
+        sample_src = torch.cat([sample_v, sample_v_normal], dim=-1).squeeze()
+
+        cf_dis, cf_dis_normal  = p3d_chamfer_distance_with_filter(
+            sample_src[:,:3].unsqueeze(0),
+            sample_trg_v.unsqueeze(0),
+            x_normals=sample_src[:,3:].unsqueeze(0),
+            y_normals=sample_trg_n.unsqueeze(0),
+            angle_filter=self.args.data_angle_filter,
+            distance_filter=self.args.data_distance_filter,
+            wx=self.args.data_wx, wy=self.args.data_wy)
+
+        if wts['data'] > 0:
+            loss_dict['data'] = cf_dis * wts['data']
+        if wts['data_normal'] > 0:
+            loss_dict['data_normal'] = cf_dis_normal * wts['data_normal']
+
+        if wts['collision'] > 0:
+            collision_ = compute_collision_loss_with_mesh(deformed_v, target_mesh.verts_packed(), target_mesh.faces_packed(), self.args.contact_lab, self.args.contact_distance_mode, self.args.contact_distance_use_mean, self.args.contact_thres)
+            loss_dict['collision'] = collision_ * wts['collision']
+    
+        # if wts['self_collision'] > 0:
+        #     loss_dict['self_collision'] = self_collision_loss(deformed_v, deformed_v,
+        #     self.nh_obj_net.face, self.deformed_tet_fn, self.tet_v_rest.squeeze(), self.nh_obj_net.element.squeeze(), self.weight_dict, 
+        #     distance_mode=self.args.contact_distance_mode)
 
         # pytorch3d smooth
         update_p3d_mesh_shape_prior_losses(deformed_v, self.init_f, loss_dict, wts)
