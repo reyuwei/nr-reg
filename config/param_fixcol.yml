@@ -1,0 +1,36 @@
+gpu: '0'
+savepath_folder: output_col
+
+reg_mask_ply: eye_nose_mask.ply
+rest_v_gd: head_gd_another.pkl
+
+same_topology: True
+template_mesh_path: col\\template.obj
+template_lmk_path: col\template_lmk.txt  # useless
+
+target_mesh_path: col\\reg_mxl.obj
+target_lmk_path:  mxl\target_lmk.txt   # useless
+
+node_interval: [50, 20, 10, 0]
+iterations: [300, 800, 2000, 500]
+sample_mesh_v: [4000, 5000, 6000, 9000] # useless
+lr: [0.5, 0.5, 0.5, 0.2]
+
+semantic_large_reg: 100
+thres_corres: 30 # useless
+node_sigma: 2 # useless
+
+wts:
+  lmk: 0
+  data: 0
+  data_normal: 0
+  smooth: 0.001 # 0 is faster 
+  edge: 0
+  normal: 0
+  laplacian: 0
+  mse_v: 1.0
+
+data_angle_filter: 90 # useless
+data_distance_filter: 100 # useless
+data_wx: 1.0 # useless
+data_wy: 1.0 # useless
