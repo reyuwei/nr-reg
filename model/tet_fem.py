@@ -1,5 +1,4 @@
 import torch
-import trimesh
 import numpy as np
 from pytorch3d.structures.meshes import Meshes
 
@@ -151,4 +150,10 @@ def readtetfile(filename, index_start=0):
     f = np.stack(f).reshape(-1, 3).astype(np.int64)
     e = np.stack(e).reshape(-1, 4).astype(np.int64)
 
-    return v, f, e
+    save_dict = {
+        "tet_v_rest": v,
+        "tet_f": f,
+        "tet_e": e,
+    }
+
+    return save_dict

@@ -3,13 +3,11 @@ from pathlib import Path
 
 folder_root = Path().resolve()
 sys.path.append(str(folder_root))
-
+from tqdm import tqdm
 import torch
 import trimesh
 import numpy as np
-from tqdm.std import tqdm
 from pytorch3d.structures.meshes import Meshes
-from pytorch3d.loss.chamfer import chamfer_distance
 
 from loss.contactutils import (
     batch_mesh_contains_points,

@@ -31,7 +31,7 @@ term_weight:
   p2face_double: 0.0
   tsdf: 0.0
   smooth: 0.5
-  edge: 0.5
+  edge: 0.1
   normal: 0.01
   laplacian: 0.1
   nh: 1.0

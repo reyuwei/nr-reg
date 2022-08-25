@@ -10,11 +10,8 @@ sys.path.append(str(folder_root))
 import yaml
 import time
 import torch
-import trimesh
 import argparse
-from glob import glob
 import numpy as np
-import pickle as pkl
 import pytorch3d.io
 from tqdm import tqdm
 from lib.hand_utils import smooth_mesh

@@ -1,6 +1,3 @@
-# from pytorch3d.loss import point_mesh_distance
-# from pytorch3d.loss.chamfer import chamfer_distance
-import os
 import torch
 import pytorch3d
 from pytorch3d.structures.meshes import Meshes
@@ -8,6 +5,7 @@ from pytorch3d.ops import sample_points_from_meshes
 from loss.contactloss import self_collision_loss
 from loss.loss_collecter import ARAP_reg_loss, collision_loss, p3d_chamfer_distance_with_filter, update_p3d_mesh_shape_prior_losses
 from model.tet_fem import NHObject
+from loss.geodesic_distance import geodesic_distance
 
 class TetNonRigidNet():
     def __init__(self, template_mesh, target_mesh, tet_template_dict, weight_dict, device, _compute_align=True, _compute_collision=True, save_tmp=False, save_folder=None, args=None) -> None:
@@ -58,7 +56,13 @@ class TetNonRigidNet():
         rest_v = self._tet_template_dict['tet_v_rest']
         rest_f = self._tet_template_dict['tet_f']
         rest_e = self._tet_template_dict['tet_e']
-        self.tet_v_init_gd = self._tet_template_dict['tet_v_rest_gd']
+
+        if "tet_v_rest_gd" in self._tet_template_dict:
+            self.tet_v_rest_gd =self._tet_template_dict['tet_v_rest_gd']
+        else:
+            out_dist = geodesic_distance(rest_v, rest_f, norm=False, num_workers=-1)
+            self.tet_v_rest_gd = out_dist
+
         self.tet_v_rest = rest_v
 
         # inner verts
