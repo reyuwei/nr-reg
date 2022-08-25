@@ -26,7 +26,7 @@ Repo for non-rigid registration method used in **PIANO: A Parametric Hand Bone M
 
 
 - Code reference
-  - [manopth](https://github.com/hassony2/manopth/blob/master/manopth) by [Yana Hasson](https://hassony2.github.io/)
+  - [manopth](https://github.com/hassony2/manopth/blob/master/manopth) and [obman_train](https://github.com/hassony2/obman_train) by [Yana Hasson](https://hassony2.github.io/)
   - [pytorch_HMR](https://github.com/MandyMo/pytorch_HMR) by [Zhang Xiong](https://github.com/MandyMo)
   - [SMPLX](https://github.com/vchoutas/smplx) by [Vassilis Choutas](https://github.com/vchoutas)
   - [LoopReg](https://github.com/bharat-b7/LoopReg) by [Bharat Bhatnagar](https://github.com/bharat-b7)
