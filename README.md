@@ -17,7 +17,7 @@ It reuses part of the great code from:
 - [SMPLX](https://github.com/vchoutas/smplx) by [Vassilis Choutas](https://github.com/vchoutas)
 - [LoopReg](https://github.com/bharat-b7/LoopReg) by [Bharat Bhatnagar](https://github.com/bharat-b7)
 
-## If you find this data useful for your research, consider citing:
+If you find this data useful for your research, consider citing:
 ```
 @inproceedings{li2021piano,
         title     = {PIANO: A Parametric Hand Bone Model from Magnetic Resonance Imaging},
