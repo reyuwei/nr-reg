@@ -1,7 +1,6 @@
 import torch
 from pytorch3d.structures.meshes import Meshes
 from pytorch3d.ops.knn import knn_points
-from lib.torch_functions import batch_gather
 from pytorch3d.loss.chamfer import chamfer_distance
 from lib.transforms import compute_transmat
 from loss.contactloss import compute_contact_loss
@@ -10,58 +9,6 @@ from pytorch3d.loss import (
     mesh_laplacian_smoothing, 
     mesh_normal_consistency,
 )
-
-
-
-def point_distance_p3d(source, target, wpt=10, wpl=1, THRES_CORRES = 8):
-    source_verts = source[:, 0:3].contiguous().unsqueeze(0)
-    target_verts = target[:, 0:3].contiguous().unsqueeze(0)
-
-    source_verts_n = source[:, 3:].contiguous().unsqueeze(0)
-    target_verts_n = target[:, 3:].contiguous().unsqueeze(0)
-
-    # p2tri, tri_normal =  point_to_surface_vec_wnormal(source_verts.squeeze(), target_mesh)
-    # mean_p2tri = (p2tri[p2tri < THRES_CORRES]).mean()
-    # dp2p = mean_p2tri
-    # dp2pl = ((p2tri * tri_normal) ** 2).sum(dim=-1)
-    # return dp2p*wpt + dp2pl*wpl
-
-    # assert source_verts.is_cuda and target_verts.is_cuda
-    # sided_minimum_dist = SidedDistance()
-    # closest_index_in_s2 = sided_minimum_dist(source_verts, target_verts)
-    # closest_s2 = batch_gather(target_verts, closest_index_in_s2)
-    closest_index_in_s2_knn = knn_points(source_verts, target_verts, K=1)
-    closest_index_in_s2 = closest_index_in_s2_knn.idx.squeeze(-1)
-    closest_s2 = batch_gather(target_verts, closest_index_in_s2)
-
-    # # dist_mat_t = torch.cdist(source_verts, target_verts)
-    # dist_mat_t = my_cdist(source_verts.squeeze(), target_verts.squeeze()).unsqueeze(0)
-    # # dist_mat_t_n = 1 - torch.einsum("bxn, byn->bxy", source_verts_n, target_verts_n)
-    # closest_index_in_s2_withnormal = torch.argmin(dist_mat_t * (1 - torch.einsum("bxn, byn->bxy", source_verts_n, target_verts_n)), dim=-1)
-    # closest_s2 = batch_gather(target_verts, closest_index_in_s2_withnormal)
-    # closest_s2_normal = batch_gather(target_verts_n, closest_index_in_s2_withnormal)
-
-    target_normal = target[:, 3:].contiguous().unsqueeze(0)
-    source_normal = source[:, 3:].contiguous().unsqueeze(0)
-    closest_s2_normal = batch_gather(target_normal, closest_index_in_s2)
-
-    normal_angle = (source_normal*closest_s2_normal).sum(-1)
-    acute_angle_ = normal_angle > -0.8 # normal angle smaller than 90 degree
-
-    dp2p_all = (((source_verts - closest_s2) ** 2).sum(dim=-1))
-    small_distance_ = dp2p_all < THRES_CORRES**2
-
-    count_points_ = torch.logical_and(acute_angle_, small_distance_)
-
-    # count_points_ = small_distance_
-
-    dp2p = (((source_verts[count_points_] - closest_s2[count_points_]) ** 2).sum(dim=-1)).mean()
-    dp2pl =  (((source_verts[count_points_] - closest_s2[count_points_]) * closest_s2_normal[count_points_]) ** 2).sum(dim=-1).mean()
-
-    # print(dp2p*wpt + dp2pl*wpl)
-
-    return dp2p*wpt + dp2pl*wpl
-
 
 
 # Losses to smooth / regularize the mesh shape
@@ -340,10 +287,6 @@ def bone_attach_loss(deformed_muscle, target_piano , attach_id, weight_dict):
     loss, _ = chamfer_distance(attach_tp.unsqueeze(0), attach_tg.unsqueeze(0), point_reduction="mean") # squared
     return loss * w
 
-def data_loss(deformed_muscle, target, weight_dict, wpt=10, wpl=5):
-    loss = point_distance_p3d(deformed_muscle, target, wpt=wpt, wpl=wpl)
-    w = weight_dict['data']
-    return loss * w
 
 def correspondence_to_smpl_function(points, grid, d_grid=None):
     grid = grid.permute(0, 3, 2, 1)
@@ -436,166 +379,3 @@ def collision_loss(muscle_name, deformed_muscle, computed_muscles, target_piano,
     w = weight_dict['collision']
     return collision_ * w
 
-
-
-
-def link_loss(tet_template_dict,muscle_name, deformed_tet_v, deformed_muscle, weight_dict):
-    corres = tet_template_dict['tet_node_to_mesh_vertex'][muscle_name]
-    loss = ((deformed_tet_v[corres[:, 0], :3] - deformed_muscle[corres[:, 1], :3])**2).sum(-1).mean()
-    w = weight_dict['link']
-    return loss * w
-
-from typing import Union
-def chamfer_distance_direction(
-    x,
-    y,
-    x_lengths=None,
-    y_lengths=None,
-    x_normals=None,
-    y_normals=None,
-    weights=None,
-    batch_reduction: Union[str, None] = "mean",
-    point_reduction: str = "mean",
-    wx = 1.0, 
-    wy = 1.0,
-):
-    """
-    Chamfer distance between two pointclouds x and y.
-
-    Args:
-        x: FloatTensor of shape (N, P1, D) or a Pointclouds object representing
-            a batch of point clouds with at most P1 points in each batch element,
-            batch size N and feature dimension D.
-        y: FloatTensor of shape (N, P2, D) or a Pointclouds object representing
-            a batch of point clouds with at most P2 points in each batch element,
-            batch size N and feature dimension D.
-        x_lengths: Optional LongTensor of shape (N,) giving the number of points in each
-            cloud in x.
-        y_lengths: Optional LongTensor of shape (N,) giving the number of points in each
-            cloud in x.
-        x_normals: Optional FloatTensor of shape (N, P1, D).
-        y_normals: Optional FloatTensor of shape (N, P2, D).
-        weights: Optional FloatTensor of shape (N,) giving weights for
-            batch elements for reduction operation.
-        batch_reduction: Reduction operation to apply for the loss across the
-            batch, can be one of ["mean", "sum"] or None.
-        point_reduction: Reduction operation to apply for the loss across the
-            points, can be one of ["mean", "sum"].
-
-    Returns:
-        2-element tuple containing
-
-        - **loss**: Tensor giving the reduced distance between the pointclouds
-          in x and the pointclouds in y.
-        - **loss_normals**: Tensor giving the reduced cosine distance of normals
-          between pointclouds in x and pointclouds in y. Returns None if
-          x_normals and y_normals are None.
-    """
-    _validate_chamfer_reduction_inputs(batch_reduction, point_reduction)
-
-    x, x_lengths, x_normals = _handle_pointcloud_input(x, x_lengths, x_normals)
-    y, y_lengths, y_normals = _handle_pointcloud_input(y, y_lengths, y_normals)
-
-    return_normals = x_normals is not None and y_normals is not None
-
-    N, P1, D = x.shape
-    P2 = y.shape[1]
-
-    # Check if inputs are heterogeneous and create a lengths mask.
-    is_x_heterogeneous = (x_lengths != P1).any()
-    is_y_heterogeneous = (y_lengths != P2).any()
-    x_mask = (
-        torch.arange(P1, device=x.device)[None] >= x_lengths[:, None]
-    )  # shape [N, P1]
-    y_mask = (
-        torch.arange(P2, device=y.device)[None] >= y_lengths[:, None]
-    )  # shape [N, P2]
-
-    if y.shape[0] != N or y.shape[2] != D:
-        raise ValueError("y does not have the correct shape.")
-    if weights is not None:
-        if weights.size(0) != N:
-            raise ValueError("weights must be of shape (N,).")
-        if not (weights >= 0).all():
-            raise ValueError("weights cannot be negative.")
-        if weights.sum() == 0.0:
-            weights = weights.view(N, 1)
-            if batch_reduction in ["mean", "sum"]:
-                return (
-                    (x.sum((1, 2)) * weights).sum() * 0.0,
-                    (x.sum((1, 2)) * weights).sum() * 0.0,
-                )
-            return ((x.sum((1, 2)) * weights) * 0.0, (x.sum((1, 2)) * weights) * 0.0)
-
-    cham_norm_x = x.new_zeros(())
-    cham_norm_y = x.new_zeros(())
-
-    x_nn = knn_points(x, y, lengths1=x_lengths, lengths2=y_lengths, K=1)
-    y_nn = knn_points(y, x, lengths1=y_lengths, lengths2=x_lengths, K=1)
-
-    cham_x = x_nn.dists[..., 0]  # (N, P1)
-    cham_y = y_nn.dists[..., 0]  # (N, P2)
-
-    if is_x_heterogeneous:
-        cham_x[x_mask] = 0.0
-    if is_y_heterogeneous:
-        cham_y[y_mask] = 0.0
-
-    if weights is not None:
-        cham_x *= weights.view(N, 1)
-        cham_y *= weights.view(N, 1)
-
-    if return_normals:
-        # Gather the normals using the indices and keep only value for k=0
-        x_normals_near = knn_gather(y_normals, x_nn.idx, y_lengths)[..., 0, :]
-        y_normals_near = knn_gather(x_normals, y_nn.idx, x_lengths)[..., 0, :]
-
-        cham_norm_x = 1 - torch.abs(
-            F.cosine_similarity(x_normals, x_normals_near, dim=2, eps=1e-6)
-        )
-        cham_norm_y = 1 - torch.abs(
-            F.cosine_similarity(y_normals, y_normals_near, dim=2, eps=1e-6)
-        )
-
-        if is_x_heterogeneous:
-            # pyre-fixme[16]: `int` has no attribute `__setitem__`.
-            cham_norm_x[x_mask] = 0.0
-        if is_y_heterogeneous:
-            cham_norm_y[y_mask] = 0.0
-
-        if weights is not None:
-            cham_norm_x *= weights.view(N, 1)
-            cham_norm_y *= weights.view(N, 1)
-
-    # Apply point reduction
-    cham_x = cham_x.sum(1)  # (N,)
-    cham_y = cham_y.sum(1)  # (N,)
-    if return_normals:
-        cham_norm_x = cham_norm_x.sum(1)  # (N,)
-        cham_norm_y = cham_norm_y.sum(1)  # (N,)
-    if point_reduction == "mean":
-        cham_x /= x_lengths
-        cham_y /= y_lengths
-        if return_normals:
-            cham_norm_x /= x_lengths
-            cham_norm_y /= y_lengths
-
-    if batch_reduction is not None:
-        # batch_reduction == "sum"
-        cham_x = cham_x.sum()
-        cham_y = cham_y.sum()
-        if return_normals:
-            cham_norm_x = cham_norm_x.sum()
-            cham_norm_y = cham_norm_y.sum()
-        if batch_reduction == "mean":
-            div = weights.sum() if weights is not None else N
-            cham_x /= div
-            cham_y /= div
-            if return_normals:
-                cham_norm_x /= div
-                cham_norm_y /= div
-
-    cham_dist = cham_x*wx + cham_y*wy
-    cham_normals = cham_norm_x*wx + cham_norm_y*wy if return_normals else None
-
-    return cham_dist, cham_normals

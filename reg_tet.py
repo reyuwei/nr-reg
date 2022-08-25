@@ -22,35 +22,6 @@ from model.tetlayer import TetNonRigidNet
 from lib.torch_functions import batch_to_tensor_device, get_lr, sum_dict
 from torch.utils.tensorboard import SummaryWriter
 
-
-
-def load_template_dict(ttype, template_folder):
-
-    template_dict = {}
-
-    if ttype == "skin":
-        template_dict['LAYER_ATTACH_DIS_ID_DICT'] = {0:[]}
-        template_dict['tet_dict'] = np.load(os.path.join(template_folder, "skin_dict.pkl"), allow_pickle=True)
-        tet_muscle_reg_pkl = os.path.join(template_folder, "tet_surface_reg_w_mask.pkl")
-        if os.path.exists(tet_muscle_reg_pkl):
-            tet_muscle_reg_mask = np.load(tet_muscle_reg_pkl, allow_pickle=True)
-            template_dict['reg_mask'] = tet_muscle_reg_mask
-    elif ttype=="muscle":
-        template_dict['tet_dict'] = np.load(os.path.join(template_folder, "muscle_merge_dict.pkl"), allow_pickle=True)
-        template_dict['LAYER_ATTACH_DIS_ID_DICT'] = np.load(os.path.join(template_folder, "naive_muscle_merge_attachment.pkl"), allow_pickle=True)
-
-        tet_muscle_reg_pkl = os.path.join(template_folder, "tet_muscle_merge_reg_w_mask.pkl")
-        if os.path.exists(tet_muscle_reg_pkl):
-            tet_muscle_reg_mask = np.load(tet_muscle_reg_pkl, allow_pickle=True)
-            template_dict['reg_mask'] = tet_muscle_reg_mask
-    elif ttype=="bone":
-        template_dict = {}
-    else:
-        print("no such ", ttype)
-
-    return template_dict
-
-
 if __name__ == "__main__":
 
     args = argparse.Namespace(**yaml.safe_load(open("config\\param_tet.yml")))
@@ -63,6 +34,7 @@ if __name__ == "__main__":
         args.device = a.device
     else:
         args.device = torch.device('cpu')
+    device = args.device
     torch.cuda.empty_cache()
     ## save result
     timestamp = str(time.time()).replace(".", "_")
@@ -82,15 +54,13 @@ if __name__ == "__main__":
 
 
     print("====== begin ======")
-    template_dict_ttype = load_template_dict("skin", args.template_folder)
-    tet_template_dict = template_dict_ttype['tet_dict']
-    tet_template_dict = batch_to_tensor_device(tet_template_dict, args.device)
-    
-    template_mesh = pytorch3d.io.load_objs_as_meshes([args.template_mesh_path]).to(args.device)
-    target_mesh = pytorch3d.io.load_objs_as_meshes([args.target_mesh_path]).to(args.device)
+    template_mesh = pytorch3d.io.load_objs_as_meshes([args.template_mesh_path]).to(device)
+    template_tet_rest_dict = np.load(args.template_rest_tet,allow_pickle=True)  # 
+    template_tet_rest_dict = batch_to_tensor_device(template_tet_rest_dict, device)
+    target_mesh = pytorch3d.io.load_objs_as_meshes([args.target_mesh_path]).to(device)
 
     # define net
-    mlayer = TetNonRigidNet(template_mesh, target_mesh, "skin", tet_template_dict, wts, None, "right", args.device, attach_bone=None, save_tmp=True, save_folder=exp_folder,  args=args)
+    mlayer = TetNonRigidNet(template_mesh, target_mesh, template_tet_rest_dict, wts, device, save_tmp=True, save_folder=exp_folder,  args=args)
 
     # define optimizer
     tet_node_optimizer = torch.optim.SGD([mlayer.tet_node_offset], lr=args.lr, momentum=0.9)
@@ -124,7 +94,7 @@ if __name__ == "__main__":
 
             if tf_writer is not None:
                 for k in loss_:
-                    tf_writer.add_scalar("Loss terms/{{:s}".format(k), loss_[
+                    tf_writer.add_scalar("Loss terms/{:s}".format(k), loss_[
                                         k].item()/wts[k], global_step=mlayer.iter_counter_tet)
                 tf_writer.add_scalar("Loss", loss.item(), global_step=mlayer.iter_counter_tet)
             

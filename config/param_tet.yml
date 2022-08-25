@@ -5,15 +5,13 @@ savepath_folder: output
 
 template_mesh_path: data/tet/template.obj
 target_mesh_path: data/tet/target.obj
+template_rest_tet: data/tet/template_tet_dict.pkl
 
-
-template_folder: assets_hand/nimble/template_tet
 save_mesh_per_iter: 1000
 
 optim: tet
 optimizer: sgd
 sgd_iter: 4000 #4000
-lbfgs_iter: 50
 
 lr: 0.1
 iterations: 1
@@ -21,8 +19,6 @@ iterations: 1
 
 simplify_mesh_v: 4000
 THRES_CORRES: 30
-DEBUG_MUSCLE_NAME: ["skin_3mm"]
-RM_TARGET_THRESH: 1.5
 BATCH_SIZE: 1
 
 # loss 
@@ -39,8 +35,8 @@ term_weight:
   normal: 0.01
   laplacian: 0.1
   nh: 1.0
-  collision: 0.0
-  self_collision: 0.0
+  collision: 1.0
+  self_collision: 1.0
   link: 0.0
   hard: 0.0
   nh_max: 0

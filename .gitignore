@@ -3,3 +3,5 @@ loss/__pycache__/loss.cpython-38.pyc
 *.pyc
 *.obj
 output/*
+sc.ipynb
+data/*
