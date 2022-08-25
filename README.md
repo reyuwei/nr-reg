@@ -1,5 +1,5 @@
 # nr-reg
-Repo for non-rigid registration in **PIANO: A Parametric Hand Bone Model from Magnetic Resonance Imaging, IJCAI' 21** and **NIMBLE: A Non-rigid Hand Model with Bones and Muscles, SIG' 22**
+Repo for non-rigid registration method used in **PIANO: A Parametric Hand Bone Model from Magnetic Resonance Imaging, IJCAI' 21** and **NIMBLE: A Non-rigid Hand Model with Bones and Muscles, SIG' 22**
 
 # Main requirements
 - gdist
