@@ -8,7 +8,7 @@ Repo for non-rigid registration in **PIANO: A Parametric Hand Bone Model from Ma
 
 - Tetrahedral-based non-rigid deformation (NIMBLE)
 
-    `reg_tet.py`
+    `reg_tet.py` (not ready yet)
 
 ## Acknowledgment
 - Algorithm reference
