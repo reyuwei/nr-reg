@@ -1,9 +1,9 @@
 import torch
-from models.nonrigid_net import NonRigidNet
 from pytorch3d.structures.meshes import Meshes
 from pytorch3d.ops.knn import knn_points
 from lib.torch_functions import batch_gather
 from pytorch3d.loss.chamfer import chamfer_distance
+from lib.transforms import compute_transmat
 from loss.contactloss import compute_contact_loss
 from pytorch3d.loss import (
     mesh_edge_loss, 
@@ -310,7 +310,7 @@ def ARAP_reg_loss(node_position, deform_nodes_R, deform_nodes_t, node_gd=None, t
     if node_gd is not None:
         node_gd = node_gd[mask][:, mask]
 
-    deform_nodes_mat = NonRigidNet.compute_transmat(node_position, deform_nodes_R, deform_nodes_t)
+    deform_nodes_mat = compute_transmat(node_position, deform_nodes_R, deform_nodes_t)
     if node_gd is not None:
         # should be geodesic distance!!!
         # gdist sqrt

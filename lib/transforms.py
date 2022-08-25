@@ -130,3 +130,77 @@ def inv_rigid_affine(mat):
     res[..., :3] = mat[..., :3].transpose(-2, -1)
     res[..., 3] = -torch.matmul(res[..., :3], mat[..., 3].unsqueeze(-1)).squeeze(-1)
     return res
+
+
+
+def quat2mat(quat):
+    """Convert quaternion coefficients to rotation matrix.
+    Args:
+        quat: size = [batch_size, 4] 4 <===>(w, x, y, z)
+    Returns:
+        Rotation matrix corresponding to the quaternion -- size = [batch_size, 3, 3]
+    """
+    norm_quat = quat
+    norm_quat = norm_quat / norm_quat.norm(p=2, dim=1, keepdim=True)
+    w, x, y, z = norm_quat[:, 0], norm_quat[:, 1], norm_quat[:,
+                                                   2], norm_quat[:,
+                                                       3]
+
+    batch_size = quat.size(0)
+
+    w2, x2, y2, z2 = w.pow(2), x.pow(2), y.pow(2), z.pow(2)
+    wx, wy, wz = w * x, w * y, w * z
+    xy, xz, yz = x * y, x * z, y * z
+
+    rotMat = torch.stack([
+        w2 + x2 - y2 - z2, 2 * xy - 2 * wz, 2 * wy + 2 * xz, 2 * wz + 2 * xy,
+        w2 - x2 + y2 - z2, 2 * yz - 2 * wx, 2 * xz - 2 * wy, 2 * wx + 2 * yz,
+        w2 - x2 - y2 + z2
+    ],
+        dim=1).view(batch_size, 3, 3)
+    return rotMat
+
+def batch_rodrigues(axisang):
+    # axisang N x 3
+    axisang_norm = torch.norm(axisang + 1e-8, p=2, dim=1)
+    angle = torch.unsqueeze(axisang_norm, -1)
+    axisang_normalized = torch.div(axisang, angle)
+    angle = angle * 0.5
+    v_cos = torch.cos(angle)
+    v_sin = torch.sin(angle)
+    quat = torch.cat([v_cos, v_sin * axisang_normalized], dim=1)
+    rot_mat = quat2mat(quat)
+    rot_mat = rot_mat.view(rot_mat.shape[0], 9)
+    return rot_mat
+
+def compute_transmat(deform_nodes, deform_nodes_R, deform_nodes_t):
+
+    device = deform_nodes.device
+    N, _ = deform_nodes_t.squeeze().shape
+
+    if deform_nodes_R is not None:
+        # rotate around deform_nodes, then translate
+        deform_nodes_rmat = batch_rodrigues(deform_nodes_R.reshape(-1, 3)) # N, 9
+    else:
+        deform_nodes_rmat = torch.eye(3).unsqueeze(0).repeat(N, 1, 1).to(device).reshape(-1, 9)
+
+    # move to zero
+    trans_zero_mat = torch.eye(4).unsqueeze(0).repeat(N, 1, 1).to(device)
+    trans_zero_mat_back = torch.eye(4).unsqueeze(0).repeat(N, 1, 1).to(device)
+
+    trans_zero_mat[:, :3, -1] = (-deform_nodes).reshape(-1, 3)
+    trans_zero_mat_back[:, :3, -1] = deform_nodes.reshape(-1, 3)
+
+    rots_mat = torch.eye(4).unsqueeze(0).repeat(N, 1, 1).to(device)
+    rots_mat[:, :3, :3] = deform_nodes_rmat.reshape(N, 3, 3)
+        
+    trans_offset_mat = torch.eye(4).unsqueeze(0).repeat(N, 1, 1).to(device)
+    trans_offset_mat[:, :3, -1] = deform_nodes_t.reshape(N, 3)
+
+    deform_nodes_mat = trans_offset_mat @ trans_zero_mat_back @ rots_mat @ trans_zero_mat
+
+    deform_nodes_mat = deform_nodes_mat[:, :3, :]
+
+    # deform_nodes_mat = torch.cat([deform_nodes_rmat.reshape(N, 3, 3), deform_nodes_t.reshape(N, 3, 1)], dim=-1) # N, 3, 4
+    return deform_nodes_mat
+

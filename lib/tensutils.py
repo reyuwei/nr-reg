@@ -1,5 +1,5 @@
 import torch
-import lib.rodrigues_layer as rodrigues_layer
+from lib.transforms import batch_rodrigues
 
 
 def th_posemap_axisang(pose_vectors):
@@ -11,7 +11,7 @@ def th_posemap_axisang(pose_vectors):
     rot_mats = []
     for joint_idx in range(rot_nb):
         axis_ang = pose_vectors[:, joint_idx * 3:(joint_idx + 1) * 3]
-        rot_mat = rodrigues_layer.batch_rodrigues(axis_ang)
+        rot_mat = batch_rodrigues(axis_ang)
         rot_mats.append(rot_mat)
 
     rot_mats = torch.cat(rot_mats, 1)

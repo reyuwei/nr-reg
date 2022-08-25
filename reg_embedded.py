@@ -1,19 +1,22 @@
 import sys
-from pathlib import Path
 import os
+from pathlib import Path
+
+
 folder_root = Path().resolve()
 sys.path.append(str(folder_root))
+
 import pytorch3d.io
 from tqdm import tqdm
 import numpy as np
 import torch
-from loss.loss import NonRigidLayer
-from lib.utils import get_lr, sum_dict
 import time
+import yaml
+import argparse
+from model.meshlayer import MeshNonRigidNet
 from torch.utils.tensorboard import SummaryWriter
 from loss.geodesic_distance import geodesic_distance
-import argparse
-import yaml
+from lib.torch_functions import get_lr, sum_dict
 
 if __name__ == "__main__":
 
@@ -22,8 +25,8 @@ if __name__ == "__main__":
     if int(args.gpu) >= 0:
         # os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
         torch.cuda.set_device(int(args.gpu))
-        # args.device = torch.device('cuda')
         a = torch.eye(1).cuda()
+        # args.device = torch.device('cuda')
         args.device = a.device
     else:
         args.device = torch.device('cpu')
@@ -34,11 +37,13 @@ if __name__ == "__main__":
     wts = args.wts
 
     template_mesh = pytorch3d.io.load_objs_as_meshes([args.template_mesh_path])
-    # template_mesh_gd = geodesic_distance(template_mesh.verts_packed().squeeze(), template_mesh.faces_packed().squeeze(), norm=False, num_workers=-1)
     target_mesh = pytorch3d.io.load_objs_as_meshes([args.target_mesh_path])
-    
-    rest_v_gd = np.load(args.template_mesh_gd, allow_pickle=True)
-    rest_v_gd = torch.from_numpy(rest_v_gd[9476:, 9476:]).float()
+    if hasattr(args, "template_mesh_gd"):
+        rest_v_gd = np.load(args.template_mesh_gd, allow_pickle=True)
+        rest_v_gd = torch.from_numpy(rest_v_gd[9476:, 9476:]).float()
+    else:
+        rest_v_gd = geodesic_distance(template_mesh.verts_packed().squeeze(), template_mesh.faces_packed().squeeze(), norm=False, num_workers=-1)
+
     template_mesh_gd = rest_v_gd
 
     ### create layer
@@ -64,7 +69,7 @@ if __name__ == "__main__":
     sample_mesh_v = args.sample_mesh_v
     for ni, node_inter in enumerate(node_interval):
 
-        nglayer = NonRigidLayer(args, current_v, template_mesh.faces_packed(), template_mesh_gd, target_mesh.device)
+        nglayer = MeshNonRigidNet(args, current_v, template_mesh.faces_packed(), template_mesh_gd, target_mesh.device)
 
         nglayer.compute_node(node_inter)
 

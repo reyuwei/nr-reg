@@ -1,4 +1,7 @@
 import numpy as np
+import pytorch3d
+import torch
+from pytorch3d.structures.meshes import Meshes
 
 MUSCLE_NAMES = ["m5", "m45", "m34", "m23", "m13", "m1","m12"]
 SURFACE_NAMES = ["skin_3mm"]
@@ -252,3 +255,11 @@ def rbf_weights(volume, control_pts, control_pts_weights=None):
     weight_volume = weight_volume / np.sum(weight_volume, axis=1).reshape(-1, 1)
     weight_volume = weight_volume.reshape(xyz.shape[0], -1)
     return weight_volume
+
+def smooth_mesh(mesh_p3d):
+    mesh_p3d_smooth = pytorch3d.ops.mesh_filtering.taubin_smoothing(mesh_p3d, num_iter=3)
+    target_mv = mesh_p3d_smooth.verts_padded()
+    nan_mv = torch.isnan(target_mv)
+    target_mv[nan_mv] = mesh_p3d.verts_padded()[nan_mv]  
+    mesh_p3d_smooth_fixnan = Meshes(target_mv, mesh_p3d.faces_padded())
+    return mesh_p3d_smooth_fixnan
