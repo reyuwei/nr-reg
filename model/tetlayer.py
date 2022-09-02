@@ -69,8 +69,8 @@ class TetNonRigidNet():
         v_rest_surface_mask = torch.zeros(rest_v.shape[0])
         v_rest_surface_mask[torch.unique(rest_f.reshape(-1))] = 1
         v_rest_surface_mask = v_rest_surface_mask.clone().detach().bool()
-        self.tet_v_init_gd[~v_rest_surface_mask, :] = 1e5
-        self.tet_v_init_gd[:, ~v_rest_surface_mask] = 1e5
+        self.tet_v_rest_gd[~v_rest_surface_mask, :] = 1e5
+        self.tet_v_rest_gd[:, ~v_rest_surface_mask] = 1e5
 
         flip_rest_f = self.template_f
 
@@ -122,7 +122,7 @@ class TetNonRigidNet():
 
         if self._compute_align:
             if self.weight_dict['smooth'] > 0:
-                reg_loss, reg_mask = ARAP_reg_loss(self.tet_v_init[:,:3], None, self.tet_node_offset, node_gd=self.tet_v_init_gd, thres_corres=self.args.THRES_CORRES, node_sigma=self.args.smooth_sigma)
+                reg_loss, reg_mask = ARAP_reg_loss(self.tet_v_init[:,:3], None, self.tet_node_offset, node_gd=self.tet_v_rest_gd, thres_corres=self.args.THRES_CORRES, node_sigma=self.args.smooth_sigma)
                 reg_loss *= self.tet_node_reg_weight[reg_mask]
                 loss_dict['smooth'] = reg_loss.mean() * self.weight_dict['smooth']
 
